@@ -2,7 +2,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 from collections import Counter
 import sys
-
+import re
 
 
 def headerParser(experiment_type): #, mode
@@ -51,36 +51,42 @@ def CIGAR_field_classifier_parent(pairtype, edit_dist_type, r1_cigar, r1_strand,
 
 
 def CIGAR_field_classifier(CIGAR_field, experiment_type, strand):
-    cigar_type = [j for j in [i for i in CIGAR_field] if j not in ['1','2','3','4','5','6','7','8','9','0']]
+    CLIPPING_SYMBOLS = ['S', 'H']
+    cigar_type = [j for j in CIGAR_field if not j.isdigit()]
     #print(cigar_type)
-    if (experiment_type == "ATA, iMARGI") and ("S" in cigar_type):
+    if experiment_type == "ATA, iMARGI" and any(char in cigar_type for char in CLIPPING_SYMBOLS):
         if strand == "+":
-            if cigar_type[-1] == "S":
+            if cigar_type[-1] in CLIPPING_SYMBOLS:
                 cigar_type = cigar_type[:-1]
         else:
-            if cigar_type[0] == "S":
+            if cigar_type[0] in CLIPPING_SYMBOLS:
                 cigar_type = cigar_type[1:]
-    if "S" not in cigar_type:
+
+    has_clipping = any(char in cigar_type for char in CLIPPING_SYMBOLS)
+    if not has_clipping:
         softClipp_type = "absent"
         N_softClipp_bp = [0]
     else:
-        if cigar_type[0] == "S" and cigar_type[-1] == "S":
+        left_clip = cigar_type[0] in CLIPPING_SYMBOLS
+        right_clip = cigar_type[-1] in CLIPPING_SYMBOLS
+        if left_clip and right_clip:
             softClipp_type = "double"
-            N_softClipp_bp = [int(CIGAR_field.split("S")[0]), int(CIGAR_field.split(cigar_type[-2])[-1].split("S")[0])]
-        else:
-            if cigar_type[0] == "S":
-                softClipp_type = "left"
-                N_softClipp_bp = [int(CIGAR_field.split("S")[0])]
-            else:
-                softClipp_type = "right"
-                N_softClipp_bp = [int(CIGAR_field.split(cigar_type[-2])[-1].split("S")[0])]
+            left_symbol, right_symbol = cigar_type[0], cigar_type[-1]
+            N_softClipp_bp = [int(CIGAR_field.split(left_symbol)[0]), int(CIGAR_field.split(cigar_type[-2])[-1].split(right_symbol)[0])]
+        elif left_clip:
+            softClipp_type = "left"
+            left_symbol = cigar_type[0]
+            N_softClipp_bp = [int(CIGAR_field.split(left_symbol)[0])]
+        elif right_clip:
+            softClipp_type = "right"
+            right_symbol = cigar_type[-1]
+            N_softClipp_bp = [int(CIGAR_field.split(cigar_type[-2])[-1].split(right_symbol)[0])]
     
     cigar_type = sorted(filter(str.isalpha, cigar_type))
     cigar_type = ",".join(cigar_type)
     cigar_type = ''.join([str(x) + str(y) for x, y in zip(Counter(cigar_type.split(',')).keys(), Counter(cigar_type.split(',')).values())])
     #print(CIGAR_field, cigar_type, N_softClipp_bp, softClipp_type)
     return cigar_type, N_softClipp_bp, softClipp_type
-
 
 
 
@@ -93,7 +99,7 @@ def complicated_CIGAR(r1_cigar_type, r2_cigar_type):
     r1_cigar_is_normal = True
     r2_cigar_is_normal = True
     if "N" in r1_cigar_type:
-        if r1_cigar_type.split("N")[-1][0] != "1":
+        if r1_cigar_type.split("N")[-1][0] != "1": #"66M2000N22M3000N33M" -> False
             r1_cigar_is_normal = False
     if "N" in r2_cigar_type:
         if r2_cigar_type.split("N")[-1][0] != "1":
@@ -114,7 +120,7 @@ def cigar_part_length(cigar_part):
     cigar_part_len = 0
     intermediate = ''
     for i in range(len(cigar_part)):
-        if cigar_part[i] in ['M', 'D', 'I', 'S']:
+        if cigar_part[i] in ['M', 'D', 'I', 'S', 'H']:
             if cigar_part[i] == 'I':
                 intermediate = ''
             else:
@@ -124,28 +130,28 @@ def cigar_part_length(cigar_part):
             intermediate += cigar_part[i]
     return cigar_part_len
 
-def cut_softClipp(cigar, strand, S_index, edit_dist_type, experiment_type):
+def cut_softClipp(cigar, strand, SH_index, edit_dist_type): #, experiment_type
     M_index = [i for i, ltr in enumerate(cigar) if ltr == "M"]
     cigar_type, N_softClipp_bp, softClipp_type = CIGAR_field_classifier(cigar, "ATA, not iMARGI", "+")  
     if edit_dist_type == 'NM':    
         if softClipp_type == "double":
             cigar = cigar[:M_index[-1]] + "M"
-            cigar = cigar[S_index[0]+1:]
+            cigar = cigar[SH_index[0]+1:]
         elif softClipp_type == "right":
             cigar = cigar[:M_index[-1]] + "M"
         else:
-            cigar = cigar[S_index[0]+1:]
+            cigar = cigar[SH_index[0]+1:]
     else: #experiment_type == "ATA, iMARGI"
         if (strand == "+") and ((softClipp_type == "right") or (softClipp_type == "double")):
                 cigar = cigar[:M_index[-1]] + "M"
         elif (strand == "-") and ((softClipp_type == "left") or (softClipp_type == "double")):
-            cigar = cigar[S_index[0]+1:]
+            cigar = cigar[SH_index[0]+1:]
     return cigar
 
 def coordinate_trimmer_by_cigar(edit_dist_type, cigar, start, end, strand, experiment_type):
-    S_index = [i for i, ltr in enumerate(cigar) if ltr == "S"]
-    if (len(S_index) != 0) and ((edit_dist_type == 'NM') or (experiment_type == "ATA, iMARGI")): #правильно убираем S в cigar
-        cigar = cut_softClipp(cigar, strand, S_index, edit_dist_type, experiment_type)
+    SH_index = [i for i, ltr in enumerate(cigar) if ltr in ['S', 'H']]
+    if (len(SH_index) != 0) and ((edit_dist_type == 'NM') or (experiment_type == "ATA, iMARGI")):
+        cigar = cut_softClipp(cigar, strand, SH_index, edit_dist_type) #, experiment_type
     if "N" in cigar:
         N_index = [i for i, ltr in enumerate(cigar) if ltr == "N"][0]
         cigar2 = cigar[:N_index]
@@ -161,8 +167,8 @@ def coordinate_trimmer_by_cigar(edit_dist_type, cigar, start, end, strand, exper
         N_len = int(intermediate)
         intermediate = intermediate + "N"
     
-        right_softClipp_bp = int(cigar_suffix.split("M")[-1].split("S")[0]) if "S" in cigar_suffix else 0
-        left_softClipp_bp = int(cigar_prefix.split("S")[0].split("S")[0]) if "S" in cigar_prefix else 0
+        right_softClipp_bp = int(re.findall(r'(\d+)[SH]$', cigar_suffix)[0]) if re.findall(r'(\d+)[SH]$', cigar_suffix) else 0
+        left_softClipp_bp = int(re.findall(r'^(\d+)[SH]', cigar_prefix)[0]) if re.findall(r'^(\d+)[SH]', cigar_prefix) else 0
 
         Match_len_1 = cigar_part_length(cigar_prefix)
         Match_len_2 = cigar_part_length(cigar_suffix)
@@ -173,7 +179,7 @@ def coordinate_trimmer_by_cigar(edit_dist_type, cigar, start, end, strand, exper
         else:
             start_new = start + (Match_len_1 - left_softClipp_bp) + N_len
             end_new = end + right_softClipp_bp
-    elif "S" in cigar:
+    elif any(x in cigar for x in ['S', 'H']):
         cigar_type, N_softClipp_bp, softClipp_type = CIGAR_field_classifier(cigar, "ATA, not iMARGI", "+")
         if softClipp_type == "double":
             start_new = start - N_softClipp_bp[0]
@@ -419,7 +425,7 @@ def editDistance_and_CIGAR_filter(edit_dist_type, r1_finalThreshold_edit_dist, r
     # Opening file
     raw_contacts = open(input_file_path + input_file_name, 'r')
     CIGAR_filtered_contacts = open(output_file_path + 'filtered_' + input_file_name, 'w')
-    CIGAR_filtered_out_contacts = open(output_file_path + 'filtered_out_' + input_file_name, 'w')
+    CIGAR_filtered_out_contacts = open(output_file_path + 'out_' + input_file_name, 'w')
     if Assembly_of_ucaRNAs == "yes":
         id_reads_for_ucaRNAs = open(output_file_path + 'id_reads_for_ucaRNAs_' + input_file_name, 'w')
 
@@ -511,12 +517,12 @@ def editDistance_and_CIGAR_filter(edit_dist_type, r1_finalThreshold_edit_dist, r
         id_reads_for_ucaRNAs.close()
 
     save_cigar_statistics(CIGAR_statistics_for_filtered_data, experiment_type, r1_chr_header, r2_chr_header, output_file_path, input_file_name, "filtered")
-    save_cigar_statistics(CIGAR_statistics_for_filtered_out_data, experiment_type, r1_chr_header, r2_chr_header, output_file_path, input_file_name, "filtered_out")
+    save_cigar_statistics(CIGAR_statistics_for_filtered_out_data, experiment_type, r1_chr_header, r2_chr_header, output_file_path, input_file_name, "out")
     
     #print('FILTERED DATA')
-    plot_N_softClipp_or_NM(N_softClipp_bp_or_NM_for_filtered_data, experiment_type, r1, r2, "filtered_data", output_file_path)
+    plot_N_softClipp_or_NM(N_softClipp_bp_or_NM_for_filtered_data, experiment_type, r1, r2, 'filtered_data', output_file_path)
     #print('\nFILTERED OUT DATA')
-    plot_N_softClipp_or_NM(N_softClipp_bp_or_NM_for_filtered_out_data, experiment_type, r1, r2, "filtered_out_data", output_file_path)
+    plot_N_softClipp_or_NM(N_softClipp_bp_or_NM_for_filtered_out_data, experiment_type, r1, r2, 'out_data', output_file_path)
 
 
 
