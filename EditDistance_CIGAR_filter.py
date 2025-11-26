@@ -40,10 +40,10 @@ def headerParser(experiment_type): #, mode
 
 def CIGAR_field_classifier_parent(pairtype, edit_dist_type, r1_cigar, r1_strand, r1_NM, r2_cigar, r2_strand, r2_NM, experiment_type):
     r1_cigar_type, r1_N_softClipp_bp, r1_softClipp_type = CIGAR_field_classifier(r1_cigar, experiment_type, r1_strand)
-    r1_final_edit_dist = сalculate_edit_distance(r1_NM, r1_N_softClipp_bp, edit_dist_type)
+    r1_final_edit_dist = calculate_edit_distance(r1_NM, r1_N_softClipp_bp, edit_dist_type)
     if (pairtype == 'UU') and (experiment_type in ['ATA, not iMARGI', 'ATA, iMARGI', 'OTA_PE']): 
         r2_cigar_type, r2_N_softClipp_bp, r2_softClipp_type = CIGAR_field_classifier(r2_cigar, experiment_type, r2_strand)
-        r2_final_edit_dist = сalculate_edit_distance(r2_NM, r2_N_softClipp_bp, edit_dist_type)
+        r2_final_edit_dist = calculate_edit_distance(r2_NM, r2_N_softClipp_bp, edit_dist_type)
     else: 
         r2_cigar_type = "multimapper" if pairtype == 'UM' else "*"
         r2_N_softClipp_bp, r2_softClipp_type, r2_final_edit_dist = "*", "*", "*"
@@ -106,7 +106,7 @@ def complicated_CIGAR(r1_cigar_type, r2_cigar_type):
             r2_cigar_is_normal = False
     return r1_cigar_is_normal and r2_cigar_is_normal
 
-def сalculate_edit_distance(NM, N_softClipp_bp, edit_dist_type):
+def calculate_edit_distance(NM, N_softClipp_bp, edit_dist_type):
     if edit_dist_type == 'NM + N_softClipp_bp':
         final_edit_dist = int(float(NM)) + sum(N_softClipp_bp)
     else:
