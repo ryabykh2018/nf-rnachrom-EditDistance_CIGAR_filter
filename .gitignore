@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Upstream / auxiliary scripts
+Bam_to_Contacts*
+
+# Profiling and temporary text files
+*.txt
+
+# Temporary comparison files
+*.diff
+
+# Data / test working directories
+*.bed
+
+# Local working directories
+something_else/
+test_all_cigars_Unique_RNA/
