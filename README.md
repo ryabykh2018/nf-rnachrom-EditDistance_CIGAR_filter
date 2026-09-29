@@ -31,7 +31,7 @@ RNAseq_PE
 ```bash
 python EditDistance_CIGAR_filter.py \
 "NM + N_softClipp_bp" \
-2 2 \
+1 1 \
 0 0 \
 200 \
 "yes" \
@@ -271,7 +271,7 @@ dna1_chr == dna2_chr
 distance <= OTA_PE_distanceThreshold
 ```
 
-Passing mates are merged into one DNA interval.
+Passing mates are merged into one DNA interval. RNA output half is filled with `*`
 
 ### RNAseq_SE
 
@@ -280,9 +280,9 @@ Passing mates are merged into one DNA interval.
 
 ### RNAseq_PE
 
-Only `rna1` participates in downstream filtering and final output.
+Only `rna1` participates in filtering and final output.
 
-`rna2` is upstream pairing / uniqueness evidence and is not used for edit-distance, MAPQ, N filtering, coordinate trimming, or final DNA output.
+`rna2` is used by the upstream stage of the pipeline for paired-end mapping, proper-pair selection, and unique/multiple mapping determination, but is not used for edit-distance, MAPQ, N filtering, coordinate trimming, or final output.
 
 ## Main output schema
 
@@ -323,6 +323,8 @@ For RNAseq_PE, `rna2` is not copied into the DNA half.
 
 ## Output files
 
+The main outputs are:
+
 ```text
 filtered_<input_file_name>
 out_<input_file_name>
@@ -331,33 +333,89 @@ cigar_stat_out_<input_file_name>
 validation_reject_stat_out_<input_file_name>
 ```
 
-For ATA only, when:
+For ATA experiments, when:
 
 ```text
 Assembly_of_ucaRNAs = yes
 ```
 
-the script also writes:
+the script also creates:
 
 ```text
 id_reads_for_ucaRNAs_<input_file_name>
 ```
 
-Diagnostic PNG plots are generated for non-empty NM/clipping/length statistics.
+Diagnostic PNG plots are generated from edit-distance, clipping and length statistics when the corresponding statistics are non-empty.
 
-### `filtered_*`
+### `filtered_<input_file_name>`
 
 Contains contacts that passed all filters.
 
-Coordinate trimming for single-N contacts is applied only here.
+Coordinate trimming for a permitted single-`N` CIGAR is applied only to contacts written to this file.
 
-### `out_*`
+The output is normalized to a fixed RNA–DNA schema:
 
-Contains rejected contacts.
+```text
+ATA       -> RNA + DNA
+OTA       -> RNA fields = *, DNA populated
+RNA-seq   -> RNA populated, DNA fields = *
+```
 
-Original input coordinates are preserved.
+For `RNAseq_PE`, `rna2` is not copied into the DNA half.
 
-### Statistics accounting
+### `out_<input_file_name>`
+
+Contains all rejected contacts:
+
+- contacts that passed input validation but failed normal filtering;
+- contacts rejected during input validation.
+
+Rejected rows preserve the original upstream coordinates. Coordinate trimming is not applied to rows written to `out_*`.
+
+### `cigar_stat_filtered_<input_file_name>`
+
+Contains the distribution of CIGAR **types** among contacts written to `filtered_*`.
+
+A CIGAR type describes which CIGAR operations are present and how many operation blocks of each type occur. It does **not** store operation lengths.
+
+Examples:
+
+```text
+98M                 -> M1
+2S96M               -> M1S1
+30M100N28M          -> M2N1
+10M3D10M100N19M     -> D1M3N1
+```
+
+For experiments where both r1 and r2 are evaluated, the two CIGAR types are joined with `-`.
+
+Illustrative ATA statistics file:
+
+```text
+CIGAR type (rna-dna)	N	%
+M1-M1	                850	85.00
+M1S1-M1                100	10.00
+M2N1-M1                 50	5.00
+```
+
+Here:
+
+- `CIGAR type (...)` is the CIGAR-type class represented by the row;
+- `N` is the number of contacts with this CIGAR type;
+- `%` is the percentage among all contacts represented in this statistics file.
+
+For downstream modes where only r1 is evaluated (`OTA_SE`, `RNAseq_SE`, `RNAseq_PE`), only the r1-side CIGAR type is reported.
+
+Example:
+
+```text
+CIGAR type (rna1)	N	%
+M1	                900	90.00
+M1S1	                 60	6.00
+M2N1	                 40	4.00
+```
+
+Accounting invariant:
 
 ```text
 sum(N in cigar_stat_filtered_*)
@@ -365,7 +423,76 @@ sum(N in cigar_stat_filtered_*)
 number of data rows in filtered_*
 ```
 
-and:
+### `cigar_stat_out_<input_file_name>`
+
+Contains the CIGAR-type distribution for contacts that passed input validation but failed **normal filtering**.
+
+Such contacts may fail because of:
+
+- final edit distance above the threshold;
+- MAPQ below the threshold;
+- an experiment-specific `N` rule;
+- the OTA_PE chromosome/distance rule.
+
+This file is a distribution by CIGAR type, not a table of explicit rejection reasons. Therefore, for example, a row with `M1S1` means that contacts with this CIGAR type were rejected, but the CIGAR type itself does not specify which filtering criterion caused rejection.
+
+Illustrative example:
+
+```text
+CIGAR type (rna1)	N	%
+M1S1	                 70	70.00
+M2N1	                 20	20.00
+I1M2	                 10	10.00
+```
+
+Input-validation failures are intentionally not included in this file.
+
+### `validation_reject_stat_out_<input_file_name>`
+
+Contains counts of contacts rejected because one or more required input fields were invalid or unsupported.
+
+Possible rejection reasons are:
+
+```text
+invalid_CIGAR_r1
+invalid_CIGAR_r2
+invalid_CIGAR_both
+invalid_NM
+invalid_MAPQ
+invalid_coordinates
+```
+
+Illustrative example:
+
+```text
+validation_reject_reason	N	%
+invalid_NM	                12	40.00
+invalid_MAPQ	                 8	26.67
+invalid_CIGAR_r1	         6	20.00
+invalid_coordinates	         4	13.33
+```
+
+Here:
+
+- `validation_reject_reason` is the technical validation failure;
+- `N` is the number of contacts rejected for that reason;
+- `%` is the percentage among all validation rejects.
+
+This separation is intentional:
+
+```text
+cigar_stat_out_*
+```
+
+describes valid contacts rejected by the normal filtering rules, whereas:
+
+```text
+validation_reject_stat_out_*
+```
+
+describes malformed or unsupported input.
+
+Rejected-contact accounting invariant:
 
 ```text
 number of data rows in out_*
@@ -375,6 +502,80 @@ sum(N in cigar_stat_out_*)
 sum(N in validation_reject_stat_out_*)
 ```
 
+### `id_reads_for_ucaRNAs_<input_file_name>`
+
+This file is created only when:
+
+```text
+Assembly_of_ucaRNAs = yes
+```
+
+and only for ATA experiments:
+
+```text
+ATA, not iMARGI
+ATA, iMARGI
+```
+
+It is not created for OTA or RNA-seq modes.
+
+The file contains two tab-separated columns:
+
+```text
+read_id	pairtype
+```
+
+Example:
+
+```text
+read_id	pairtype
+SRR123456.1001	UU
+SRR123456.1007	UM
+SRR123456.1012	UU
+```
+
+The file contains ATA read IDs whose relevant mapped parts passed the downstream filters required for their pairtype.
+
+For `UU` contacts:
+
+```text
+UU = uniquely mapped RNA + uniquely mapped DNA
+```
+
+both RNA and DNA parts are validated and filtered. The read ID is written to `id_reads_for_ucaRNAs_*` only if both parts pass all applicable checks, including:
+
+```text
+valid CIGAR
+valid NM
+valid MAPQ
+valid coordinates
+final edit distance <= threshold
+MAPQ >= threshold
+experiment-specific N rules
+```
+
+For ATA, the RNA part may contain at most one `N`, while the DNA part must contain no `N`.
+
+For `UM` contacts:
+
+```text
+UM = uniquely mapped RNA + multimapped DNA
+```
+
+only the uniquely mapped RNA part is subjected to the downstream CIGAR/NM/MAPQ/coordinate/edit-distance filtering performed by this script. The multimapped DNA part is not treated as a uniquely mapped alignment and is therefore not subjected to the r2 filtering criteria used for `UU`.
+
+A `UM` read ID is written to `id_reads_for_ucaRNAs_*` when the RNA part passes all applicable filters.
+
+Conceptually:
+
+```text
+UU -> write read_id if RNA passes AND DNA passes
+UM -> write read_id if RNA passes
+```
+
+Contacts that fail validation or normal filtering are not included.
+
+The `pairtype` column is retained so downstream ucaRNA assembly can distinguish reads originating from `UU` and `UM` contacts.
 ## Explorer mode
 
 With:
@@ -383,42 +584,132 @@ With:
 mode = explorer
 ```
 
-six diagnostic fields are appended:
+the script appends six diagnostic CIGAR fields to each output row:
 
 ```text
-r1_cigar_type
-r1_N_softClipp_bp
-r1_softClipp_type
-r2_cigar_type
-r2_N_softClipp_bp
-r2_softClipp_type
+<r1>_cigar_type
+<r1>_N_softClipp_bp
+<r1>_softClipp_type
+<r2>_cigar_type
+<r2>_N_softClipp_bp
+<r2>_softClipp_type
 ```
 
-Exact prefixes depend on the experiment header.
-
-Possible clipping types:
+The exact prefixes depend on the experiment:
 
 ```text
-absent
-left
-right
-double
+ATA          -> rna_*  / dna_*
+OTA_SE/PE    -> dna1_* / dna2_*
+RNAseq_SE/PE -> rna1_* / rna2_*
 ```
 
+### `*_cigar_type`
+
+A compact description of the operations present in the CIGAR and the number of operation blocks of each type.
+
+Examples:
+
+```text
+98M                         -> M1
+2S96M                       -> M1S1
+10M3I10M                    -> I1M2
+30M100N28M                  -> M2N1
+1S2M1D2M10N2M1I2M2S        -> D1I1M4N1S2
+```
+
+The numbers in `cigar_type` are counts of operation blocks, not numbers of bases. For example:
+
+```text
+M2N1
+```
+
+means two `M` blocks and one `N` block.
+
+For `ATA, iMARGI`, technical terminal clipping on the original-read 3′ end is removed before the diagnostic CIGAR type and clipping values are calculated.
+
+### `*_N_softClipp_bp`
+
+Contains the total number of terminal clipped bases counted by the script for clipping diagnostics and, when `edit_dist_type = NM + N_softClipp_bp`, for the final edit-distance calculation.
+
+Despite the historical field name, both soft clipping (`S`) and hard clipping (`H`) are counted.
+
+Examples:
+
+```text
+98M          -> 0
+2S96M        -> 2
+5H10S85M     -> 15
+2S94M4S      -> 6
+```
+
+For double-sided clipping, clipping from the left and right ends is summed in the explorer output.
+
+For `ATA, iMARGI`, clipping at the technical original-read 3′ end is ignored according to strand before this value is calculated.
+
+### `*_softClipp_type`
+
+Describes where the counted terminal clipping is located:
+
+```text
+absent  -> no counted terminal S/H
+left    -> clipping only at the left end of the CIGAR
+right   -> clipping only at the right end of the CIGAR
+double  -> clipping at both ends
+```
+
+Examples:
+
+```text
+98M          -> absent
+2S96M        -> left
+96M2S        -> right
+2S94M4S      -> double
+```
+
+### Missing / unused r2 diagnostics
+
+When r2 is not used by the downstream filtering logic, its explorer fields are written as `*`.
+
+This applies to:
+
+- `OTA_SE`;
+- `RNAseq_SE`;
+- `RNAseq_PE`, where only `rna1` is filtered downstream.
+
+For an ATA `UM` contact, RNA is uniquely mapped and processed normally, while the DNA side is a multimapper. In explorer output the DNA CIGAR type is represented as:
+
+```text
+multimapper
+```
+
+and the DNA clipping-specific diagnostic fields are `*`.
+
+Explorer mode does not change whether a contact passes or fails filtering. It only appends diagnostic fields to `filtered_*` and `out_*`.
 ## Assumptions
 
-The script expects upstream processing to provide the contact-table structure, mapping uniqueness and proper-pair handling where applicable.
+The script expects the upstream `Bam-to-Contacts` step to provide the required contact-table structure and pairtype classification.
+
+Mapping uniqueness is determined upstream rather than recalculated here. In particular, ATA intentionally accepts both:
+
+```text
+UU -> RNA uniquely mapped, DNA uniquely mapped
+UM -> RNA uniquely mapped, DNA multimapped
+```
+
+For ATA `UU`, both RNA and DNA are subjected to downstream filtering.
+
+For ATA `UM`, only the uniquely mapped RNA part is subjected to downstream filtering; the DNA side remains a multimapper and is not treated as a uniquely mapped r2 alignment.
+
+Where paired-end sequencing/proper-pair selection is applicable, that selection is expected to have been performed upstream. The downstream script does not repeat proper-pair or strand-orientation validation.
 
 The script intentionally does not perform:
 
 ```text
-CIGAR reference span <-> start/end consistency validation
 generic malformed-row column-count validation
 OTA_PE strand-orientation validation
 ```
 
 The output directory is expected to exist.
-
 ## Testing
 
 Run the complete test suite:
@@ -470,7 +761,7 @@ The suite covers:
 - statistics accounting;
 - header-only input.
 
-The final implementation was also regression-checked on representative real datasets for ATA, iMARGI, OTA_SE, OTA_PE, RNAseq_SE and RNAseq_PE. Observed differences from the old implementation were traced to intended fixes in N handling and clipping-related coordinate logic.
+The final implementation was also regression-checked on representative real datasets for ATA, iMARGI, OTA_SE, OTA_PE, RNAseq_SE and RNAseq_PE.
 
 ## Repository checks used before release
 
