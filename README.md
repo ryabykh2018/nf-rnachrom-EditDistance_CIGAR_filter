@@ -373,7 +373,7 @@ Contains all rejected contacts:
 - contacts rejected during input validation;
 - contacts that passed input validation but failed normal filtering.
 
-Rejected rows preserve the original upstream coordinates. Coordinate trimming is not applied to rows written to `out_*`.
+Rejected rows preserve the original coordinates. Coordinate trimming is not applied to rows written to `out_*`.
 
 ### `cigar_stat_filtered_<input_file_name>`
 
@@ -469,9 +469,9 @@ sum(N in validation_reject_stat_out_*)
 
 ### `id_reads_for_ucaRNAs_<input_file_name>`
 
-This file is created only when `Assembly_of_ucaRNAs = yes` and only for ATA experiments (`ATA, not iMARGI / ATA, iMARGI`). It is not created for OTA or RNA-seq modes.
+This file is created only when `Assembly_of_ucaRNAs = yes` and only for ATA experiments (`ATA, not iMARGI`, `ATA, iMARGI`). It is not created for OTA or RNA-seq modes.
 
-The file contains two tab-separated columns (`read_id	pairtype`). The file contains ATA read IDs whose corresponding mapped parts passed both the validation and filtering required for their pairtype. Contacts that fail validation or normal filtering are not included.
+The file contains two tab-separated columns (`read_id	   pairtype`). The file contains ATA read IDs whose corresponding mapped parts passed both the validation and filtering required for their pairtype. Contacts that fail validation or normal filtering are not included.
 
 Conceptually:
 
@@ -483,7 +483,7 @@ UM -> write read_id if RNA passes
 Example:
 
 ```text
-read_id	pairtype
+read_id	        pairtype
 SRR123456.1001	UU
 SRR123456.1007	UM
 SRR123456.1012	UU
@@ -580,7 +580,7 @@ and the DNA clipping-specific diagnostic fields are `*`.
 Explorer mode does not change whether a contact passes or fails filtering. It only appends diagnostic fields to `filtered_*` and `out_*`.
 ## Assumptions
 
-The script expects the upstream `Bam-to-Contacts` step to provide the required contact-table structure and pairtype classification.
+The script expects the upstream [Bam-to-Contacts](https://github.com/USERNAME/REPOSITORY) step to provide the required contact-table structure and pairtype classification.
 
 Mapping uniqueness is determined upstream rather than recalculated here. In particular, ATA intentionally accepts both:
 
@@ -589,11 +589,11 @@ UU -> RNA uniquely mapped, DNA uniquely mapped
 UM -> RNA uniquely mapped, DNA multimapped
 ```
 
-For ATA `UU`, both RNA and DNA are subjected to downstream filtering.
+For ATA `UU`, both RNA and DNA are filtered.
 
-For ATA `UM`, only the uniquely mapped RNA part is subjected to downstream filtering; the DNA side remains a multimapper and is not treated as a uniquely mapped r2 alignment.
+For ATA `UM`, only the uniquely mapped RNA-part is filtered; the DNA side remains a multimapper and is not treated as a uniquely mapped r2 alignment.
 
-Where paired-end sequencing/proper-pair selection is applicable, that selection is expected to have been performed upstream. The downstream script does not repeat proper-pair or strand-orientation validation.
+Where paired-end sequencing/proper-pair selection is applicable, that selection is expected to have been performed upstream. The script does not repeat proper-pair or strand-orientation validation.
 
 The output directory is expected to exist.
 ## Testing
