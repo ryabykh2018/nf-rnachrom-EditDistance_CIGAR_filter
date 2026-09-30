@@ -1,6 +1,6 @@
 # EditDistance_CIGAR_filter
 
-`EditDistance_CIGAR_filter.py` filters raw RNA–chromatin / RNA-seq contact tables after the [Bam-to-Contacts](https://github.com/USERNAME/REPOSITORY) step and writes a unified RNA–DNA contact table.
+`EditDistance_CIGAR_filter.py` filters raw RNA–chromatin / RNA-seq contact tables after the [Bam-to-Contacts](https://github.com/ryabykh2018/nf-rnachrom-Bam_to_contacts) step and writes a unified RNA–DNA contact table.
 
 This README is the technical reference for running the script: exact input schemas, CLI arguments, output files, validation rules, and tests.
 
@@ -13,7 +13,7 @@ pandas 2.0.1
 matplotlib 3.7.1
 ```
 
-The input tables are expected to be produced by the corresponding [Bam-to-Contacts](https://github.com/USERNAME/REPOSITORY) step.
+The input tables are expected to be produced by the corresponding [Bam-to-Contacts](https://github.com/ryabykh2018/nf-rnachrom-Bam_to_contacts) step.
 
 ## Supported experiment types
 
@@ -580,7 +580,7 @@ and the DNA clipping-specific diagnostic fields are `*`.
 Explorer mode does not change whether a contact passes or fails filtering. It only appends diagnostic fields to `filtered_*` and `out_*`.
 ## Assumptions
 
-The script expects the upstream [Bam-to-Contacts](https://github.com/USERNAME/REPOSITORY) step to provide the required contact-table structure and pairtype classification.
+The script expects the upstream [Bam-to-Contacts](https://github.com/ryabykh2018/nf-rnachrom-Bam_to_contacts) step to provide the required contact-table structure and pairtype classification.
 
 Mapping uniqueness is determined upstream rather than recalculated here. In particular, ATA intentionally accepts both:
 
