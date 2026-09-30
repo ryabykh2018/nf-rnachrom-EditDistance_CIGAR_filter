@@ -1,6 +1,6 @@
 # EditDistance_CIGAR_filter
 
-`EditDistance_CIGAR_filter.py` filters raw RNA–chromatin / RNA-seq contact tables after the `Bam-to-Contacts` step and writes a unified RNA–DNA contact table.
+`EditDistance_CIGAR_filter.py` filters raw RNA–chromatin / RNA-seq contact tables after the [Bam-to-Contacts](https://github.com/USERNAME/REPOSITORY) step and writes a unified RNA–DNA contact table.
 
 This README is the technical reference for running the script: exact input schemas, CLI arguments, output files, validation rules, and tests.
 
@@ -9,11 +9,11 @@ This README is the technical reference for running the script: exact input schem
 Python dependencies used by the script include:
 
 ```text
-pandas
-matplotlib
+pandas 2.0.1
+matplotlib 3.7.1
 ```
 
-The input tables are expected to be produced by the corresponding `Bam-to-Contacts` step.
+The input tables are expected to be produced by the corresponding [Bam-to-Contacts](https://github.com/USERNAME/REPOSITORY) step.
 
 ## Supported experiment types
 
@@ -59,13 +59,13 @@ The script accepts exactly 12 positional arguments:
 | 11 | `input_file_path` | input directory |
 | 12 | `output_file_path` | output directory |
 
-Numeric thresholds must be non-negative integers.
-
-The script validates CLI values before processing.
+Numeric thresholds must be non-negative integers. The script validates CLI values before processing.
 
 ## Input requirements
 
 The input is a tab-separated table with a header. A header-only file with zero contacts is supported.
+
+`*_pairtype` can only be `UU or UM`, where `UU` means both the RNA-part and the DNA-part of the contact are uniquely mapped, `UM` means only the RNA-part is uniquely mapped, and the DNA-part is mapped multiple times.
 
 ### ATA input header
 
@@ -176,10 +176,17 @@ coordinates
 Supported CIGAR operations:
 
 ```text
-M I D N S H = X
+M   alignment match (can be a sequence match or mismatch)
+I   insertion to the reference
+D   deletion from the reference
+N   skipped region from the reference
+S   soft clipping
+H   hard clipping
+=   sequence match
+X   sequence mismatch
 ```
 
-`P` is intentionally unsupported.
+`P` (padding -- silent deletion from padded reference) is intentionally unsupported.
 
 Validation-reject categories include:
 
@@ -192,7 +199,7 @@ invalid_MAPQ
 invalid_coordinates
 ```
 
-Validation rejects are written to `out_*` and counted separately from ordinary CIGAR-filter rejects.
+Validation rejects are written to `out_*` and counted separately from the normal data rejected during the biological/quality filtration check.
 
 ## Edit-distance modes
 
@@ -217,7 +224,7 @@ strand + -> ignore right terminal clipping
 strand - -> ignore left terminal clipping
 ```
 
-## Experiment-specific `N` rules
+## Experiment-specific rules for accounting for `N` in CIGAR
 
 | Experiment type | Read | Allowed `N` |
 |---|---|---:|
