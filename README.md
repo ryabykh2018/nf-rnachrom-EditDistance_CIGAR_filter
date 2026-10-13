@@ -328,6 +328,10 @@ RNA-seq   -> RNA populated, DNA fields = *
 
 For RNAseq_PE, `rna2` is not copied into the DNA half.
 
+The `filtered_*` files use the unified 20-column header shown above. In explorer mode, six additional diagnostic columns are appended.
+
+The `out_*` files retain the original experiment-specific input header rather than the unified schema. In explorer mode, six diagnostic columns are appended to this header as well.
+
 ## Output files
 
 The main outputs are:
